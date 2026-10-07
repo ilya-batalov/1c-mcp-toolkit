@@ -21,7 +21,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from mcp.server.fastmcp import FastMCP, Context
 from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import ImageContent, TextContent
+from mcp.types import ImageContent, TextContent, ToolAnnotations
 from pydantic import Field, ValidationError
 
 from .command_queue import channel_command_queue
@@ -298,6 +298,15 @@ mcp = FastMCP(
     transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
 
+# MCP tool annotations (spec 2025-03-26+): hints for clients about tool behaviour.
+# readOnlyHint - the tool does not modify the infobase; destructiveHint / idempotentHint
+# are meaningful only for mutating tools; openWorldHint=False - every tool works only
+# with the connected infobase.
+_ANNOTATIONS_READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
+_ANNOTATIONS_DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=False)
+_ANNOTATIONS_DESTRUCTIVE_IDEMPOTENT = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False)
+_ANNOTATIONS_SUBMIT = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False)
+
 
 async def _execute_1c_command(tool: str, params: Dict[str, Any], channel: str = "default", timeout: Optional[float] = None) -> Dict[str, Any]:
     """
@@ -423,7 +432,7 @@ def _get_channel_from_context(ctx: Context) -> str:
     return channel
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def execute_query(
     ctx: Context,
     query: str,
@@ -532,7 +541,7 @@ async def execute_query(
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_DESTRUCTIVE)
 async def execute_code(ctx: Context, code: str, execution_context: Literal["server", "client"] = "server") -> Dict[str, Any]:
     """
     Execute arbitrary code in 1C language.
@@ -625,7 +634,7 @@ async def execute_code(ctx: Context, code: str, execution_context: Literal["serv
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def get_metadata(
     ctx: Context,
     filter: Optional[str] = None,
@@ -812,7 +821,7 @@ async def get_metadata(
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def get_event_log(
     ctx: Context,
     start_date: Optional[str] = None,
@@ -1009,7 +1018,7 @@ async def get_event_log(
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def get_object_by_link(ctx: Context, link: str) -> Dict[str, Any]:
     """
     Get 1C object data by navigation link.
@@ -1080,7 +1089,7 @@ async def get_object_by_link(ctx: Context, link: str) -> Dict[str, Any]:
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def get_link_of_object(ctx: Context, object_description: Dict[str, Any]) -> Dict[str, Any]:
     """
     Generate a 1C navigation link from an object description.
@@ -1148,7 +1157,7 @@ async def get_link_of_object(ctx: Context, object_description: Dict[str, Any]) -
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def find_references_to_object(
     ctx: Context,
     target_object_description: Dict[str, Any],
@@ -1262,7 +1271,7 @@ async def find_references_to_object(
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def get_access_rights(
     ctx: Context,
     metadata_object: str,
@@ -1364,7 +1373,7 @@ async def get_access_rights(
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def get_bsl_syntax_help(
     ctx: Context,
     keywords: List[str],
@@ -1421,7 +1430,7 @@ async def get_bsl_syntax_help(
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_READ_ONLY)
 async def get_screenshot(
     ctx: Context,
     form_name: Optional[str] = None,
@@ -1508,7 +1517,7 @@ async def get_screenshot(
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_DESTRUCTIVE)
 async def restart_1c_session(ctx: Context) -> Dict[str, Any]:
     """Restart the current 1C session — the session that executes 1C tool calls.
     A restart is typically required after updating the 1C configuration (metadata, extensions, BSL code)
@@ -1524,7 +1533,7 @@ async def restart_1c_session(ctx: Context) -> Dict[str, Any]:
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ANNOTATIONS_DESTRUCTIVE_IDEMPOTENT)
 async def close_1c_session(ctx: Context) -> Dict[str, Any]:
     """Close the current 1C session — the session that executes 1C tool calls — and return a launcher script command to start a new one.
     Use when exclusive database access is needed (e.g. updating configuration).
@@ -1542,7 +1551,7 @@ async def close_1c_session(ctx: Context) -> Dict[str, Any]:
 
 
 if settings.anonymization_enabled:
-    @mcp.tool()
+    @mcp.tool(annotations=_ANNOTATIONS_SUBMIT)
     async def submit_for_deanonymization(ctx: Context, text: str) -> Dict[str, Any]:
         """
         Submit the final user-facing response for de-anonymization display.

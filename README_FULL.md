@@ -1787,6 +1787,24 @@ On non-timeout exit 1: the launcher either did not start 1C, or the failed new i
 }
 ```
 
+#### Аннотации инструментов
+
+Каждый инструмент в ответе `tools/list` сопровождается блоком `annotations` по спецификации MCP ([ToolAnnotations](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#tool), протокол 2025-03-26 и новее; legacy SSE отдаёт те же поля — старые клиенты их игнорируют):
+
+- `readOnlyHint` — инструмент не изменяет базу и окружение;
+- `destructiveHint`, `idempotentHint` — есть только у изменяющих инструментов (при `readOnlyHint: true` по спецификации не имеют смысла);
+- `openWorldHint: false` — все инструменты работают только с подключённой базой.
+
+| Инструмент | readOnlyHint | destructiveHint | idempotentHint |
+|-----------|:------------:|:---------------:|:--------------:|
+| execute_query, get_metadata, get_event_log, get_object_by_link, get_link_of_object, find_references_to_object, get_access_rights, get_bsl_syntax_help, get_screenshot | true | — | — |
+| execute_code | false | true | false |
+| submit_for_deanonymization | false | false | true |
+| restart_1c_session | false | true | false |
+| close_1c_session | false | true | true |
+
+Аннотации — подсказки клиенту, а не механизм защиты: по спецификации клиент вправе их игнорировать, а защита данных по-прежнему обеспечивается настройками обработки (тумблеры инструментов, флаги разрешения опасных операций `execute_code`, анонимизация). Практический эффект: Claude Code в plan-режиме блокирует вызов MCP-инструментов без `readOnlyHint: true` даже при наличии allow-правил, а для инструментов с этой аннотацией применяет обычные правила разрешений; другие MCP-клиенты используют аннотации аналогично — для подтверждений и отображения.
+
 ### REST API (Альтернатива MCP)
 
 Для AI-агентов, которые не поддерживают протокол MCP или предпочитают стандартные HTTP-запросы, прокси предоставляет REST API с той же функциональностью, что и MCP-инструменты.
